@@ -1,0 +1,26 @@
+{
+  "version": "v1",
+  "blocklist": [],
+  "data": [
+    {
+      "schema_version": "1.0.0",
+      "id": "hello_world",
+      "name": "Hello World",
+      "tagline": "This is another extension",
+      "version": "1.0.0",
+      "type": "add-on",
+      "maintainer": "Simon Nordon <email@address.com>",
+      "license": [
+        "SPDX:GPL-2.0-or-later"
+      ],
+      "blender_version_min": "4.2.0",
+      "tags": [
+        "Animation",
+        "Sequencer"
+      ],
+      "archive_url": "./hello-world.zip",
+      "archive_size": 1596,
+      "archive_hash": "sha256:99f4c18b16b81d392894c9bc75a020e2e90e43dda15cd3809d8a03f588148ac4"
+    }
+  ]
+}
