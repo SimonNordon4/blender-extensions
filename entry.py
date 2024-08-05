@@ -6,6 +6,9 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, script_dir)
 __package__ = os.path.basename(script_dir)
 
-from .template import __init__
+import hello_world.__init__
 
-__init__.test()
+if "auto_load" in locals():
+    importlib.reload(hello_world.__init__)
+    
+hello_world.__init__.register()
