@@ -1,0 +1,1 @@
+addon_name = "test_addon"

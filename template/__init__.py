@@ -1,15 +1,10 @@
-from . import auto_load
+from . import template_panel
 
-print("Loading template")
+print("Running template/__init__.py")
 
 def register():
-    print("Registering template")
-    auto_load.test()
-
+    template_panel.register()
 
 def unregister():
-    auto_load.unregister()
-    
-
-
+    template_panel.unregister()
     
