@@ -12,6 +12,9 @@ blender_version = bpy.app.version
 modules = None
 ordered_classes = None
 
+def test():
+    print("Hello from auto_load.py")
+
 def init():
     global modules, ordered_classes
     modules = get_all_submodules(Path(__file__).parent)

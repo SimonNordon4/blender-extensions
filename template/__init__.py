@@ -1,14 +1,15 @@
-import auto_load
+from . import auto_load
 
-auto_load.init()
+print("Loading template")
 
 def register():
-    auto_load.register()
+    print("Registering template")
+    auto_load.test()
+
 
 def unregister():
     auto_load.unregister()
     
-print("Hello from __init__.py")
 
 
     
