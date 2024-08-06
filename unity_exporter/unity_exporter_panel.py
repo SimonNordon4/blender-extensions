@@ -33,10 +33,12 @@ class UnityExporterPanel(bpy.types.Panel):
         scene = context.scene
         layout = self.layout
         layout.prop(scene, "directory_path")
-        
+                
+        layout.operator("unity_exporter.create_folder")
         row = layout.row()
         row.operator("unity_exporter.clean_image_names")
         row.operator("unity_exporter.clean_mesh_names")
+
         
         layout.operator("unity_exporter.export_images")
         layout.operator("unity_exporter.export_selected")
@@ -116,6 +118,34 @@ class UnityExporterExportImages(bpy.types.Operator):
         
         self.report({'INFO'}, 'Images exported successfully.')
         return {'FINISHED'}
+    
+class UnityExporterCreateFolder(bpy.types.Operator):
+    bl_idname = "unity_exporter.create_folder"
+    bl_label = "Create Folder"
+    bl_description = "Create a folder in the specified directory"
+    
+    def execute(self, context):
+        # Create a new folder with the same name as the blender file in the directory_path, then set the directory_path to that new folder
+        blend_file_name = bpy.path.basename(bpy.data.filepath)
+        directory_path = bpy.context.scene.directory_path
+        
+        if not directory_path:
+            self.report({'WARNING'}, 'Please specify a directory path.')
+            return {'CANCELLED'}
+        
+        if not os.path.exists(directory_path):
+            self.report({'WARNING'}, 'The specified directory path does not exist.')
+            return {'CANCELLED'}
+        
+        new_directory_path = os.path.join(directory_path, blend_file_name)
+        try:
+            os.makedirs(new_directory_path)
+            bpy.context.scene.directory_path = new_directory_path
+            self.report({'INFO'}, f"Created folder: {new_directory_path}")
+        except Exception as e:
+            self.report({'ERROR'}, f"Failed to create folder: {str(e)}")
+            return {'CANCELLED'}
+        return {'FINISHED'}
 
 class UnityExporterExportSelected(bpy.types.Operator):
     bl_idname = "unity_exporter.export_selected"
@@ -170,6 +200,7 @@ class UnityExporterExportSelected(bpy.types.Operator):
 def register():
     print("Registering unity_exporter_panel")
     bpy.utils.register_class(UnityExporterPanel)
+    bpy.utils.register_class(UnityExporterCreateFolder)
     bpy.utils.register_class(UnityExporterCleanMeshNames)
     bpy.utils.register_class(UnityExporterCleanImageNames)
     bpy.utils.register_class(UnityExporterExportImages)
@@ -185,6 +216,7 @@ def register():
     
 def unregister():
     bpy.utils.unregister_class(UnityExporterPanel)
+    bpy.utils.unregister_class(UnityExporterCreateFolder)
     bpy.utils.unregister_class(UnityExporterCleanMeshNames)
     bpy.utils.unregister_class(UnityExporterCleanImageNames)
     bpy.utils.unregister_class(UnityExporterExportImages)
