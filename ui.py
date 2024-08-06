@@ -91,34 +91,64 @@ def build_blender_extensions():
     except subprocess.CalledProcessError as e:
         messagebox.showerror("Error", f"Failed to build Blender extensions:\n{e}")
 
+# Function to apply dark mode
+def apply_dark_mode(widget):
+    widget.tk_setPalette(background='#2e2e2e', foreground='#ffffff', activeBackground='#1e1e1e', activeForeground='#ffffff', highlightColor='#444444')
+    for child in widget.winfo_children():
+        if isinstance(child, tk.LabelFrame):
+            child.config(bg='#2e2e2e', fg='#ffffff')
+        elif isinstance(child, tk.Button):
+            child.config(bg='#444444', fg='#ffffff', activebackground='#1e1e1e', activeforeground='#ffffff')
+        elif isinstance(child, tk.Entry):
+            child.config(bg='#444444', fg='#ffffff', insertbackground='#ffffff')
+        elif isinstance(child, tk.Label):
+            child.config(bg='#2e2e2e', fg='#ffffff')
+        apply_dark_mode(child)
+
 # Create the main window
 root = tk.Tk()
 root.title("Addon Manager")
+root.grid_rowconfigure(0, weight=1)
+root.grid_rowconfigure(1, weight=1)
+root.grid_columnconfigure(0, weight=1)
 
 # Create a frame for "Create new Addon"
 frame_create_addon = tk.LabelFrame(root, text="Create new Addon", padx=10, pady=10)
-frame_create_addon.grid(row=0, column=0, padx=10, pady=10, sticky="ew")
+frame_create_addon.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")
+frame_create_addon.grid_rowconfigure(0, weight=1)
+frame_create_addon.grid_rowconfigure(1, weight=1)
+frame_create_addon.grid_columnconfigure(0, weight=1)
+frame_create_addon.grid_columnconfigure(1, weight=1)
 
 # Add a text field with label to the first frame
-tk.Label(frame_create_addon, text="Addon Name:").grid(row=0, column=0, padx=10, pady=10)
+tk.Label(frame_create_addon, text="Addon Name:").grid(row=0, column=0, padx=10, pady=10, sticky="e")
 addon_name_entry = tk.Entry(frame_create_addon)
-addon_name_entry.grid(row=0, column=1, padx=10, pady=10)
+addon_name_entry.grid(row=0, column=1, padx=10, pady=10, sticky="ew")
 
 # Add the "Create Addon from Template" button to the first frame
 create_button = tk.Button(frame_create_addon, text="Create Addon from Template", command=create_addon_from_template)
-create_button.grid(row=1, column=0, columnspan=2, padx=10, pady=5)
+create_button.grid(row=1, column=0, columnspan=2, padx=10, pady=5, sticky="ew")
 
 # Create a frame for "Build Extensions"
 frame_build_extensions = tk.LabelFrame(root, text="Build Extensions", padx=10, pady=10)
-frame_build_extensions.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+frame_build_extensions.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+frame_build_extensions.grid_rowconfigure(0, weight=1)
+frame_build_extensions.grid_rowconfigure(1, weight=1)
+frame_build_extensions.grid_rowconfigure(2, weight=1)
+frame_build_extensions.grid_columnconfigure(0, weight=1)
+frame_build_extensions.grid_columnconfigure(1, weight=1)
+frame_build_extensions.grid_columnconfigure(2, weight=1)
 
 # Add the "Zip Addon" button to the second frame
-zip_button = tk.Button(frame_build_extensions, text="Zip All Addons", command=zip_addon)
-zip_button.grid(row=1, column=0, columnspan=3, padx=10, pady=5)
+zip_button = tk.Button(frame_build_extensions, text="Zip Addons", command=zip_addon)
+zip_button.grid(row=0, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
 
 # Add the "Build Blender Extensions" button to the second frame
-build_button = tk.Button(frame_build_extensions, text="Build Blender Extensions Index", command=build_blender_extensions)
-build_button.grid(row=2, column=0, columnspan=3, padx=10, pady=5)
+build_button = tk.Button(frame_build_extensions, text="Build Blender Extensions", command=build_blender_extensions)
+build_button.grid(row=1, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
+
+# Apply dark mode to the entire window
+apply_dark_mode(root)
 
 # Run the application
 root.mainloop()
