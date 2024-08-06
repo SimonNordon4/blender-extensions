@@ -1,7 +1,5 @@
 https://simonnordon4.github.io/blender-extensions/index.json
 
-
-
 blender --command extension server-generate --repo-dir=E:\repos\blender-extensions\ --html
 
 Compress-Archive -Path ".\hello-world" -DestinationPath "hello-world.zip" -Force

@@ -6,10 +6,10 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, script_dir)
 __package__ = os.path.basename(script_dir)
 
-import template.__init__
+import test_addon.__init__
 
 # TODO: Make this autoload everything.
-importlib.reload(template.__init__)
-importlib.reload(template.template_panel)
+importlib.reload(test_addon.__init__)
+importlib.reload(test_addon.test_addon_panel)
 
-template.__init__.register()
+test_addon.__init__.register()
