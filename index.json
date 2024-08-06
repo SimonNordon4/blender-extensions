@@ -4,23 +4,22 @@
   "data": [
     {
       "schema_version": "1.0.0",
-      "id": "hello_world",
-      "name": "Hello World",
-      "tagline": "This is another extension",
+      "id": "unity_exporter",
+      "name": "UnityExporter",
+      "tagline": "UnityExporter Blender Addon",
       "version": "1.0.0",
       "type": "add-on",
-      "maintainer": "Simon Nordon <email@address.com>",
+      "maintainer": "Simon Nordon <simon.nordon@protonmail.com>",
       "license": [
         "SPDX:GPL-2.0-or-later"
       ],
       "blender_version_min": "4.2.0",
       "tags": [
-        "Animation",
-        "Sequencer"
+        "Object"
       ],
-      "archive_url": "./hello_world.zip",
-      "archive_size": 2753,
-      "archive_hash": "sha256:b1349f2703f9eab7ddf77acfe14dd12095b2529caf36deb044a63b22117e3761"
+      "archive_url": "./unity_exporter.zip",
+      "archive_size": 16892,
+      "archive_hash": "sha256:379ff50e4e45fefc3afc0908d546f141b91e6b80ff55d01d5126b8fb5d826900"
     }
   ]
 }
