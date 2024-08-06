@@ -65,15 +65,17 @@ def create_addon_from_template():
 
 def zip_addon():
     base_dir = os.getcwd()  # Directory where your add-ons are located
+    ignored_dirs = {"template", ".git", "images"}
 
     for item in os.listdir(base_dir):
         item_path = os.path.join(base_dir, item)
-        if os.path.isdir(item_path) and item != "template":
+        if os.path.isdir(item_path) and item not in ignored_dirs:
             zip_name = os.path.join(base_dir, f"{item}.zip")
             if os.path.exists(zip_name):
                 os.remove(zip_name)  # Remove the existing zip file if it exists
             with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
                 for root, dirs, files in os.walk(item_path):
+                    dirs[:] = [d for d in dirs if d not in ignored_dirs]  # Filter out ignored directories
                     for file in files:
                         file_path = os.path.join(root, file)
                         arcname = os.path.relpath(file_path, base_dir)

@@ -1,1 +1,0 @@
-Compress-Archive -Path ".\template" -DestinationPath "template.zip" -Force
