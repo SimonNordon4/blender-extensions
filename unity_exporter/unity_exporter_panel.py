@@ -35,13 +35,15 @@ class UnityExporterPanel(bpy.types.Panel):
         layout.prop(scene, "directory_path")
                 
         layout.operator("unity_exporter.create_folder")
-        row = layout.row()
-        row.operator("unity_exporter.clean_image_names")
-        row.operator("unity_exporter.clean_mesh_names")
-
+        layout.operator("unity_exporter.clean_image_names")
+        layout.operator("unity_exporter.clean_mesh_names")
         
+        # add seperator
+        layout.separator()
+
         layout.operator("unity_exporter.export_images")
         layout.operator("unity_exporter.export_selected")
+        layout.operator("unity_exporter.export_each")
 
 class UnityExporterCleanMeshNames(bpy.types.Operator):
     bl_idname = "unity_exporter.clean_mesh_names"
@@ -150,7 +152,7 @@ class UnityExporterCreateFolder(bpy.types.Operator):
 class UnityExporterExportSelected(bpy.types.Operator):
     bl_idname = "unity_exporter.export_selected"
     bl_label = "Export Selected"
-    bl_description = "Export selected objects to Unity as an fbx."
+    bl_description = "Export selected objects to Unity as a single fbx."
     
     def execute(self, context):
         try:
@@ -185,12 +187,70 @@ class UnityExporterExportSelected(bpy.types.Operator):
             
             # Perform the export
             try:
-                bpy.ops.export_scene.fbx(filepath=fbx_file_path, use_selection=True)
+                unity_fbx_exporter.export_fbx(fbx_file_path, selected_objects)
                 self.report({'INFO'}, f"Exported selected objects to {fbx_file_path}")
             except Exception as e:
                 self.report({'ERROR'}, f"Failed to export FBX: {str(e)}")
                 return {'CANCELLED'}
             
+        except Exception as e:
+            self.report({'ERROR'}, f"An unexpected error occurred: {str(e)}")
+            return {'CANCELLED'}
+        
+        return {'FINISHED'}
+
+class UnityExporterExportEach(bpy.types.Operator):
+    bl_idname = "unity_exporter.export_each"
+    bl_label = "Export Each"
+    bl_description = "Export selected objects to Unity each as its own fbx."
+    
+    def execute(self, context):
+        try:
+            # Get the directory path from the user
+            directory_path = context.scene.directory_path
+            if not directory_path:
+                self.report({'WARNING'}, 'Please specify a directory path.')
+                return {'CANCELLED'}
+            
+            if not os.path.exists(directory_path):
+                self.report({'WARNING'}, 'The specified directory path does not exist.')
+                return {'CANCELLED'}
+            
+            # Get selected objects
+            selected_objects = bpy.context.selected_objects
+            if not selected_objects:
+                self.report({'WARNING'}, 'No objects selected.')
+                return {'CANCELLED'}
+            
+            # Ensure the directory path is writable
+            if not os.access(directory_path, os.W_OK):
+                self.report({'ERROR'}, 'The specified directory path is not writable.')
+                return {'CANCELLED'}
+            
+            for obj in selected_objects:
+                # Deselect all objects
+                bpy.ops.object.select_all(action='DESELECT')
+                
+                # Select the current object
+                obj.select_set(True)
+                
+                # Make the object the active object
+                bpy.context.view_layer.objects.active = obj
+                
+                # Get the name of the object
+                object_name = obj.name
+                fbx_file_path = os.path.join(directory_path, f"{object_name}.fbx")
+                
+                # Perform the export
+                try:
+                    print(f"Exporting {object_name} to {fbx_file_path}")
+                    
+                    unity_fbx_exporter.export_fbx(fbx_file_path, [obj])
+                    self.report({'INFO'}, f"Exported {object_name} to {fbx_file_path}")
+                except Exception as e:
+                    self.report({'ERROR'}, f"Failed to export {object_name}: {str(e)}")
+                    return {'CANCELLED'}
+        
         except Exception as e:
             self.report({'ERROR'}, f"An unexpected error occurred: {str(e)}")
             return {'CANCELLED'}
@@ -205,10 +265,12 @@ def register():
     bpy.utils.register_class(UnityExporterCleanImageNames)
     bpy.utils.register_class(UnityExporterExportImages)
     bpy.utils.register_class(UnityExporterExportSelected)
+    bpy.utils.register_class(UnityExporterExportEach)
     bpy.types.Scene.directory_path = bpy.props.StringProperty(
         name="Directory Path",
         description="Choose a directory",
-        subtype='DIR_PATH'
+        subtype='DIR_PATH',
+        default=r"E:\repos\alchemancer\Assets\Content"
     )
     
     bpy.app.handlers.load_post.append(load_directory_path_handler)
@@ -221,6 +283,7 @@ def unregister():
     bpy.utils.unregister_class(UnityExporterCleanImageNames)
     bpy.utils.unregister_class(UnityExporterExportImages)
     bpy.utils.unregister_class(UnityExporterExportSelected)
+    bpy.utils.unregister_class(UnityExporterExportEach)
     del bpy.types.Scene.directory_path
     bpy.app.handlers.load_post.remove(load_directory_path_handler)
     bpy.app.handlers.save_pre.remove(save_directory_path_handler)

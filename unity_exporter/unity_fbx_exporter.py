@@ -133,9 +133,44 @@ def fix_object(ob):
 
 	# Recursively fix child objects in current view layer.
 	# Children may be in the current view layer even if their parent isn't.
-	for child in ob.children:
-		fix_object(child)
+	# for child in ob.children:
+	# 	fix_object(child)
 
+def export_fbx(filepath, objects):
+    # # Object mode
+	# if bpy.ops.object.mode_set.poll():
+	# 	bpy.ops.object.mode_set(mode="OBJECT")
+	print(f"Exporting {len(objects)} objects to {filepath}")
+	# Create a single copy in multi-user datablocks. Will be restored after fixing rotations.
+ 	
+	make_single_user_data()
+ 
+	for o in objects:
+		print("Fixing object:", o)
+		fix_object(o)
+  
+  	# Recompute the transforms out of the changed matrices
+	bpy.context.view_layer.update()
+ 
+ 	# select the original objects
+	bpy.ops.object.select_all(action='DESELECT')
+	for o in objects:
+		o.select_set(True)
+ 
+ 	# Export FBX file
+  
+	bpy.ops.export_scene.fbx(
+     			filepath=filepath,
+                apply_scale_options='FBX_SCALE_UNITS',
+                object_types={'EMPTY', 'MESH', 'ARMATURE'},
+                use_active_collection=False,
+                use_selection=True, 
+                use_armature_deform_only=False,
+                add_leaf_bones=False,
+                primary_bone_axis="Y",
+                secondary_bone_axis="X",
+                use_tspace=False,
+                use_triangles=False)
 
 def export_unity_fbx(context, filepath):
 	global shared_data
