@@ -9,10 +9,6 @@ class TemplatePanel(bpy.types.Panel):
     bl_category = "Template"
     bl_order = 0
     
-    @classmethod
-    def poll(cls, context):
-        return context.object is not None
-    
     def draw_header(self, context):
         layout = self.layout
         layout.label(text="", icon="OBJECT_DATA")
