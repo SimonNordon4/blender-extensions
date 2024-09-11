@@ -23,8 +23,11 @@ class LightmapperPanel(bpy.types.Panel):
         layout.operator("lightmapper.create_lightmap_uv")
         
 
-        layout.prop(scene.lightmapper_properties, "lightmap_resolution")
+        layout.prop(scene.lightmapper_properties, "lightmap_width")
+        layout.prop(scene.lightmapper_properties, "lightmap_height")
         layout.prop(scene.lightmapper_properties, "export_path")
+        layout.prop(scene.lightmapper_properties, "bake_target", expand=True)
+        
         layout.operator("lightmapper.bake_lightmap")
     
 def register():
