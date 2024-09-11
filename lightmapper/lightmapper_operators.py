@@ -170,26 +170,44 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         bpy.context.view_layer.objects.active = bake_object
     
     def _create_bake_material(self, bake_object):
-        # Create a new material
-        bake_material_name = "PreviewBakeMaterial"
-        
-        # check if the material already exists
-        
-        existing_material = bpy.data.materials.get(bake_material_name)
-        if existing_material:
-            bake_material = existing_material
+        """Create a bake material for the bake object."""
+        # Ensure the object has an active material
+        if not bake_object.data.materials:
+            material = bpy.data.materials.new(name="BakeMaterial")
+            bake_object.data.materials.append(material)
         else:
-            bake_material = bpy.data.materials.new(name=bake_material_name)
-        
-        bake_object.data.materials.append(bake_material)
-        
-        bake_material.use_nodes = True
-        node_tree = bake_material.node_tree
-        nodes = node_tree.nodes
-        image_node = nodes.new(type='ShaderNodeTexImage')
-        image_node.image = self.bake_image
-        node_tree.nodes.active = image_node
+            material = bake_object.data.materials[0]
 
+        # Ensure the material uses nodes
+        if not material.use_nodes:
+            material.use_nodes = True
+
+        # Access the material's node tree
+        node_tree = material.node_tree
+
+        # Clear existing nodes
+        node_tree.nodes.clear()
+
+        # Create new nodes
+        bsdf_node = node_tree.nodes.new(type='ShaderNodeBsdfPrincipled')
+        output_node = node_tree.nodes.new(type='ShaderNodeOutputMaterial')
+        image_node = node_tree.nodes.new(type='ShaderNodeTexImage')
+
+        # Position nodes
+        bsdf_node.location = (0, 0)
+        output_node.location = (200, 0)
+        image_node.location = (-200, 0)
+
+        # Link nodes
+        node_tree.links.new(image_node.outputs['Color'], bsdf_node.inputs['Base Color'])
+        node_tree.links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
+
+        # Create a new image for baking
+        bake_image = bpy.data.images.new(name="BakeImage", width=1024, height=1024)
+        image_node.image = bake_image
+
+        return bake_image
+    
     def _setup_bake_settings(self):
         """ Set up bake settings for diffuse lightmap baking. """
         bpy.context.scene.render.engine = 'CYCLES'
