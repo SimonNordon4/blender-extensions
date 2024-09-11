@@ -44,6 +44,9 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
     bake_image = None
     bake_iterator = None
     
+    #debug
+    tick = 0
+    
     def _validate_mesh_objects(self, context, mesh_objects):
             """ Ensure the object is in a state that supports baking. """
             if not mesh_objects:
@@ -202,11 +205,9 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         node_tree.links.new(image_node.outputs['Color'], bsdf_node.inputs['Base Color'])
         node_tree.links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
 
-        # Create a new image for baking
-        bake_image = bpy.data.images.new(name="BakeImage", width=1024, height=1024)
-        image_node.image = bake_image
+        image_node.image = self.bake_image
 
-        return bake_image
+
     
     def _setup_bake_settings(self):
         """ Set up bake settings for diffuse lightmap baking. """
@@ -235,8 +236,9 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
     
     def bake(self, context):
         yield 1
+        print("Starting lightmapping process...")
         # 1. Validate that the selected objects are suitable for lightmapping.
-        print("Validating mesh objects...")
+        
         mesh_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
         if not self._validate_mesh_objects(context, mesh_objects):
@@ -246,6 +248,8 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         
         yield 1
         
+        print("Selected objects are suitable for lightmapping.")
+        print("Getting bake object...")
         # 2. Create an image to bake to, and a new bake object to be baked to.
         self.bake_image = bpy.data.images.new("BakeImage", width=1024, height=1024)
         
@@ -256,18 +260,30 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         self._prepare_objects_for_baking(mesh_objects, bake_object)
         yield 1
         
+        print("Setting bake settings...")
         self._setup_bake_settings()
         
+        
+        print("Starting bake...")
         while bpy.ops.object.bake('INVOKE_DEFAULT', type='DIFFUSE') != {'RUNNING_MODAL'}:
             yield 1 # 'INVOKE_DEFAULT' will give us the progress bar.
+        print("Bake is finished, saving image...")
         while not self.bake_image.is_dirty:
             yield 1
+            
+        print("Bake complete.")
             
         yield 0
 
     def modal(self, context, event):
+        if event.type in {'RIGHTMOUSE', 'ESC'}:
+            self.cancel(context)
+            return {'CANCELLED'}
+        
         if event.type == 'TIMER':
+            self.tick += 1
             result = next(self.bake_iterator)
+            print(f"Tick: {self.tick}, Result: {result}")
             if result == 1:
                 return {"RUNNING_MODAL"}
             if result == -1:
@@ -276,6 +292,22 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
             if result == 0:
                 self.finish(context)
                 return {'FINISHED'}
+        
+        return {'RUNNING_MODAL'}
+
+        
+        def register():
+            print("Registering lightmapper_operators")
+            bpy.utils.register_class(LIGHTMAPPER_OT_create_lightmap_uv)
+            bpy.utils.register_class(LIGHTMAPPER_OT_bake_lightmap)
+        
+        def unregister():
+            bpy.utils.unregister_class(LIGHTMAPPER_OT_create_lightmap_uv)
+            bpy.utils.unregister_class(LIGHTMAPPER_OT_bake_lightmap)
+        
+        if __name__ == "__main__":
+            register()
+        
 
         return {'RUNNING_MODAL'}
 
