@@ -42,6 +42,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
 
     _timer = None
     bake_image = None
+    bake_iterator = None
     
     def _validate_mesh_objects(self, context, mesh_objects):
             """ Ensure the object is in a state that supports baking. """
@@ -160,8 +161,6 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
     
     def _prepare_objects_for_baking(self, mesh_objects, bake_object):
         # Ensure the bakeable mesh isn't visible in the render.
-        bake_object.hide_render = True
-        
         bake_object.select_set(True)
         # Select all mesh_objects and make the bake_object active so "Selected ot Active" baking works.
         bpy.ops.object.select_all(action='DESELECT')
@@ -203,44 +202,78 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         bpy.context.scene.render.bake.use_pass_color = False
         
         bpy.context.scene.render.bake.use_selected_to_active = True
+        bpy.context.scene.render.bake.use_cage = True
+        bpy.context.scene.render.bake.cage_extrusion = 0.05
+        bpy.context.scene.render.bake.cage_object = None
 
     def execute(self, context):
+        # Run the update loop as an iterator.
+        self.bake_iterator = self.bake(context)
+        # We'll update every 0.5 seconds.
+        self._timer = context.window_manager.event_timer_add(0.5, window=context.window)  # Check every 0.5 seconds
+        context.window_manager.modal_handler_add(self)
+
+        return {'RUNNING_MODAL'}
+    
+    def bake(self, context):
+        yield 1
         # 1. Validate that the selected objects are suitable for lightmapping.
         print("Validating mesh objects...")
         mesh_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
         if not self._validate_mesh_objects(context, mesh_objects):
-            return {'CANCELLED'}
+            yield -1
         
         self._select_correct_uv(mesh_objects)
         
+        yield 1
+        
         # 2. Create an image to bake to, and a new bake object to be baked to.
         self.bake_image = bpy.data.images.new("BakeImage", width=1024, height=1024)
+        
         bake_object = self._create_bakeable_object(mesh_objects)
+        yield 1
         self._create_bake_material(bake_object)
+        yield 1
         self._prepare_objects_for_baking(mesh_objects, bake_object)
+        yield 1
         
         self._setup_bake_settings()
-        self._timer = context.window_manager.event_timer_add(0.5, window=context.window)  # Check every 0.5 seconds
-        context.window_manager.modal_handler_add(self)
-        bpy.ops.object.bake('INVOKE_DEFAULT', type='DIFFUSE') # 'INVOKE_DEFAULT' will give us the progress bar.
-
-        return {'RUNNING_MODAL'}
+        
+        while bpy.ops.object.bake('INVOKE_DEFAULT', type='DIFFUSE') != {'RUNNING_MODAL'}:
+            yield 1 # 'INVOKE_DEFAULT' will give us the progress bar.
+        while not self.bake_image.is_dirty:
+            yield 1
+            
+        yield 0
 
     def modal(self, context, event):
         if event.type == 'TIMER':
-            # Check if the image has been modified (baking should make the image 'dirty')
-            if self.bake_image.is_dirty:
-                print("Baking finished!")
-                context.window_manager.event_timer_remove(self._timer)
+            result = next(self.bake_iterator)
+            if result == 1:
+                return {"RUNNING_MODAL"}
+            if result == -1:
+                self.cancel(context)
+                return {'CANCELLED'}
+            if result == 0:
+                self.finish(context)
                 return {'FINISHED'}
 
         return {'RUNNING_MODAL'}
 
     def cancel(self, context):
+        print("Modal cancelled")
         if self._timer:
             context.window_manager.event_timer_remove(self._timer)
         return {'CANCELLED'}
+    
+    def finish(self, context):
+        print("Modal Finished")
+        if self.bake_iterator.gi_running:
+            self.bake_iterator.close()
+        wm = context.window_manager
+        if self._timer:
+            wm.event_timer_remove(self._timer)
 
 def register():
     print("Registering lightmapper_operators")
