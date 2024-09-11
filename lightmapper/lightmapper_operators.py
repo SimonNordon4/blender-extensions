@@ -42,6 +42,59 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
 
     _timer = None
     bake_image = None
+    
+    def _validate_mesh_objects(self, context, mesh_objects):
+            """ Ensure the object is in a state that supports baking. """
+            if not mesh_objects:
+                self.report({'ERROR'}, "No mesh objects selected.")
+                return False
+            
+            # Ensure we're in object mode.
+            if context.mode != 'OBJECT':
+                self.report({'ERROR'}, "Lightmap baking requires object mode.")
+                return False
+
+            # Ensure we have at least one object selected.
+            if not mesh_objects:
+                self.report({'ERROR'}, "No mesh objects selected.")
+                return False
+            
+            # Ensure there are no disabled for rendering.
+            for obj in mesh_objects:
+                if obj.hide_render or obj.hide_viewport:
+                    self.report({'ERROR'}, f"Object {obj.name} is disabled for rendering or hidden in viewport.")
+                    return False
+                
+            # Ensure each mesh has 2 uv channels.
+            for obj in mesh_objects:
+                if len(obj.data.uv_layers) < 2:
+                    self.report({'ERROR'}, f"Object {obj.name} does not have a Lightmap channel.")
+                    return False
+
+            return True
+        
+    def _select_correct_uv(self, mesh_objects):
+        """ Change the state of the selected objects to work for baking."""
+        self.report({'INFO'}, "Correcting UV Selections.")
+        # Ensure that the first UVMap is set to render, and that "Lightmap" UV is selected.
+        for obj in mesh_objects:
+            # If the lightmap is renderable, set it to the first UVMap. Otherwise respect user choice.
+            obj.data.uv_layers[0].active_render = True
+            # Ensure the lightmap is selected, as that's the UV we're baking to.
+            obj.data.uv_layers["Lightmap"].active = True
+            
+    def _create_bake_material(self, bake_object):
+        # Create a new material
+        bake_material = bpy.data.materials.new(name="BakeMaterial")
+        bake_object.data.materials.append(bake_material)
+        
+        bake_material.use_nodes = True
+        node_tree = bake_material.node_tree
+        nodes = node_tree.nodes
+        image_node = nodes.new(type='ShaderNodeTexImage')
+        image_node.image = self.bake_image
+        node_tree.nodes.active = image_node
+        
 
     def _setup_bake_settings(self):
         """ Set up bake settings for diffuse lightmap baking. """
@@ -57,26 +110,26 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         bpy.context.scene.render.bake.use_selected_to_active = False
 
     def execute(self, context):
-        self._setup_bake_settings()
+ 
         
-        # Check if a mesh is selected
-        if not any(obj.type == 'MESH' for obj in context.selected_objects):
-            self.report({'ERROR'}, "No mesh objects selected.")
+        mesh_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        
+        if not self._validate_mesh_objects(context, mesh_objects):
             return {'CANCELLED'}
+        
+        self._select_correct_uv(mesh_objects)
         
         # Create a new image to bake
         self.bake_image = bpy.data.images.new("BakeImage", width=1024, height=1024)
 
-        # Get the first material in the object being baked, create an image node with our new image and make it active
-        obj = context.selected_objects[0]
-        mat = obj.material_slots[0].material
-        node_tree = mat.node_tree
-        nodes = node_tree.nodes
-        image_node = nodes.new(type='ShaderNodeTexImage')
-        image_node.image = self.bake_image
-        node_tree.nodes.active = image_node
+        # bake object is current selection
+        bake_object = context.active_object
+        
+        self._create_bake_material(bake_object)
 
         print("Baking started!")
+        
+        self._setup_bake_settings()
         
         # Start modal timer to check for bake completion
         self._timer = context.window_manager.event_timer_add(0.5, window=context.window)  # Check every 0.5 seconds
