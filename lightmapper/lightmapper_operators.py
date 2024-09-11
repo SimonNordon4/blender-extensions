@@ -42,13 +42,13 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
     bl_description = "Bake lightmap for selected objects"
     bl_options = {'REGISTER', 'UNDO'}
     
-    _timer = None
-    progress = 0
-    instance = None
+    def __init__(self):
+        self._timer = None
+        self.progress = 0
+        self.instance = None
+        self.finished = False
 
-
-    
-    def get_bake_name(self, bake_target):
+    def _get_bake_name(self, bake_target):
         active_object = bpy.context.view_layer.objects.active
 
         if bake_target == 'ACTIVE_OBJECT':
@@ -61,7 +61,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         else:
             return "Unnamed"
     
-    def check_mesh_objects(self, context, mesh_objects):
+    def _check_mesh_objects(self, context, mesh_objects):
         """ Ensure the object is in a state that supports baking. """
         if not mesh_objects:
             self.report({'ERROR'}, "No mesh objects selected.")
@@ -91,7 +91,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
 
         return True
     
-    def correct_mesh_objects(self, context, mesh_objects):
+    def _correct_mesh_objects(self, context, mesh_objects):
         """ Change the state of the selected objects to work for baking."""
         
         self.report({'INFO'}, "Correcting UV Selections.")
@@ -102,7 +102,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
             # Ensure the lightmap is selected, as that's the UV we're baking to.
             obj.data.uv_layers["Lightmap"].active = True
             
-    def combine_objects(self, context):
+    def _combine_objects(self, context):
         """ Combine selected objects into one for baking. """
         
         print("Combining objects...")
@@ -119,14 +119,14 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         combined_object.name = "temp_bake_object"
         return combined_object
         
-    def create_lightmap_image(self, width=2048, height=2048):
+    def _create_lightmap_image(self, width=2048, height=2048):
         """ Create a new lightmap image for baking. """
         new_image = bpy.data.images.new("LightmapBake", width=width, height=height, float_buffer=True)
         # give the image a name like temp_diffuse_bake_noise
         new_image.name = "temp_lightmap_bake_image"
         return new_image
     
-    def assign_lightmap_image(self, context, combined_object, lightmap_image):
+    def _assign_lightmap_image(self, context, combined_object, lightmap_image):
         # Ensure the object has an active material
         if not combined_object.data.materials:
             material = bpy.data.materials.new(name="TempBakeMaterial")
@@ -153,7 +153,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         # Set the texture node as active for baking
         material.node_tree.nodes.active = texture_node
     
-    def setup_bake_settings(self):
+    def _setup_bake_settings(self):
         """ Set up bake settings for diffuse lightmap baking. """
         bpy.context.scene.render.engine = 'CYCLES'
         bpy.context.scene.cycles.samples = 128
@@ -166,11 +166,10 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         
         bpy.context.scene.render.bake.use_selected_to_active = False
         
-    def perform_bake(self):
-        """ Perform the actual lightmap bake. """
-        bpy.ops.object.bake(type='DIFFUSE')
+
         
-    def setup_compositor(self):
+        
+    def _setup_compositor(self):
         """ Set up compositor nodes to denoise and save as HDR. """
         bpy.context.scene.use_nodes = True
         tree = bpy.context.scene.node_tree
@@ -190,80 +189,107 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
     def render_and_save(self):
         """ Render and save the denoised lightmap as an HDR. """
         bpy.ops.render.render(use_viewport=True, write_still=True)
-           
-    def modal(self, context, event):
-            if event.type in {'RIGHTMOUSE', 'ESC'}:
-                self.cancel(context)
-                return {'CANCELLED'}
-
-            if event.type == 'TIMER':
-                result = next(self.instance)
-                if result == -1:
-                    self.cancel(context)
-                    return {'CANCELLED'}
-                if result == 0:
-                    self.finish(context)
-                    return {'FINISHED'}
-
-            return {'RUNNING_MODAL'}
-            
-    def bake(self, context):
+        
+        
+    def _bake(self, context, bake_image):
         yield 1
-        yield 0
-        
-        return {""}
-        
-        scene = context.scene
-        lightmapper_props = scene.lightmapper_properties
-        width  = lightmapper_props.lightmap_width
-        height = lightmapper_props.lightmap_height
-        path =  lightmapper_props.export_path
-        bake_target = lightmapper_props.bake_target
-        
-        # 1. Set up and validate the bake.
-        bake_name = self.get_bake_name(bake_target)
-        bake_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
-        self.check_mesh_objects(context, bake_objects)
-        self.correct_mesh_objects(context, bake_objects)
-
-        # 2. Combine all selected meshes into 1 object for faster baking.
-        combined_object = self.combine_objects(context)
-        
-        # 3. Create a new lightmap image for baking.
-        lightmap_image = self.create_lightmap_image(width, height)
-        self.assign_lightmap_image(context, combined_object, lightmap_image)
-
-        # 4. Start the initial bake.
-        self.setup_bake_settings()
-        
-        # Start the timer
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.1, window=context.window)
         wm.modal_handler_add(self)
         
-        self.perform_bake()
+        # Trigger the bake and wait for it to finish
+        bpy.ops.object.bake('INVOKE_DEFAULT', type='DIFFUSE')
         
+        # Wait for the bake to complete by checking if the image is updated
+        while not bake_image.is_dirty:
+            yield 1
+        
+        yield 0
+           
+    def modal(self, context, event):
+        if event.type in {'RIGHTMOUSE', 'ESC'}:
+            self.cancel(context)
+            return {'CANCELLED'}
+
+        if event.type == 'TIMER':
+            try:
+                result = next(self.instance)
+            except StopIteration:
+                self.finish(context)
+                return {'FINISHED'}
+
+            if result == -1:
+                self.cancel(context)
+                return {'CANCELLED'}
+            if result == 0:
+                self.finish(context)
+                return {'FINISHED'}
+
+            self.progress += 1
+            context.area.tag_redraw()
+
         return {'RUNNING_MODAL'}
-    
+
     def execute(self, context):
-        self.instance = self.bake(context)
+    
+        print("Adding timer")
         wm = context.window_manager
         self._timer = wm.event_timer_add(0.5, window=context.window)
         wm.modal_handler_add(self)
-        return {'RUNNING_MODAL'}
+
+        scene = context.scene
+        lightmapper_props = scene.lightmapper_properties
+        width = lightmapper_props.lightmap_width
+        height = lightmapper_props.lightmap_height
+        path = lightmapper_props.export_path
+        bake_target = lightmapper_props.bake_target
+
+        print(f"Lightmap width: {width}, height: {height}, path: {path}, bake_target: {bake_target}")
+
+        # Setup and validate bake
+        bake_name = self._get_bake_name(bake_target)
+        print(f"Bake name: {bake_name}")
+        bake_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        print(f"Bake objects: {bake_objects}")
+        self._check_mesh_objects(context, bake_objects)
+        self._correct_mesh_objects(context, bake_objects)
+
+        # Combine objects for faster baking
+        combined_object = self._combine_objects(context)
+        print(f"Combined object: {combined_object}")
+
+        # Create lightmap image for baking
+        lightmap_image = self._create_lightmap_image(width, height)
+        print(f"Lightmap image created: {lightmap_image}")
+        self._assign_lightmap_image(context, combined_object, lightmap_image)
+
+        # Start bake
+        print("Setting up bake settings")
+        self._setup_bake_settings()
+        print("Setting up bake modal instance.")
+        self.instance = self._bake(context, lightmap_image)
     
+        print("Baking has started")
+
+        return {'RUNNING_MODAL'}
+
     def cancel(self, context):
-        # Stop timer on cancel
         wm = context.window_manager
         wm.event_timer_remove(self._timer)
         return {'CANCELLED'}
-    
+
     def finish(self, context):
-        if self.instance.gi_running:
-            self.instance.close()
+        if self.finished:
+            return {'FINISHED'}  # If already finished, prevent re-entering the finish logic
+
+        print("Finishing Model")
         wm = context.window_manager
         if self._timer:
             wm.event_timer_remove(self._timer)
+
+        self.report({'INFO'}, "Bake finished successfully.")
+        self.finished = True  # Set the flag to True once finished
+        return {'FINISHED'}
 
     def draw(self, context):
         layout = self.layout
