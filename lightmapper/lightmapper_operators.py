@@ -42,7 +42,12 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
 
     _timer = None
     bake_image = None
+    # Clean this up at the end.
+    bake_image_node = None
     bake_iterator = None
+    
+    TMP_EMPTY_MAT_NAME = "BAKELAB_TMP_EMPTY_MAT"
+    TMP_IMAGE_NODE_NAME = "BAKELAB_TMP_IMAGE_NODE"
     
     #debug
     tick = 0
@@ -88,7 +93,9 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
             obj.data.uv_layers["Lightmap"].active = True
        
     def _create_bakeable_object(self, mesh_objects):
-        """ Create a combined mesh from the selected objects, including UVs from the 'Lightmap' UV map. """
+        """ Create a combined mesh from the selected objects, including UVs and materials. """
+        bpy.ops.object.select_all(action='DESELECT')
+        
         # Create a new mesh
         new_mesh = bpy.data.meshes.new(name="BakeableMesh")
 
@@ -101,11 +108,14 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         # Create a bmesh to combine all selected meshes
         bm = bmesh.new()
 
-        # Create a new UV layer in the combined mesh
-        uv_layer = bm.loops.layers.uv.new("Lightmap")
-
-        # A dictionary to map temporary vertices to the combined bmesh vertices
+        # Dictionary to map temporary vertices to the combined bmesh vertices
         vertex_map = {}
+        
+        # Create a dictionary to hold the UV layer mappings for each UV map
+        uv_map_layers = {}
+
+        # List to keep track of all materials across objects
+        material_map = {}
 
         for obj in mesh_objects:
             # Ensure the object is in object mode
@@ -115,98 +125,100 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
             # Get the mesh data
             mesh = obj.data
 
-            # Find the "Lightmap" UV map on the current object
-            if "Lightmap" in mesh.uv_layers:
-                temp_bm = bmesh.new()
-                temp_bm.from_mesh(mesh)
+            # Add all UV maps from the original object
+            for uv_layer in mesh.uv_layers:
+                # Create a new UV layer in the combined mesh if it doesn't already exist
+                if uv_layer.name not in uv_map_layers:
+                    uv_map_layers[uv_layer.name] = bm.loops.layers.uv.new(uv_layer.name)
 
-                # Get the UV layer from the "Lightmap" UV map
-                temp_uv_layer = temp_bm.loops.layers.uv.get("Lightmap")
+            # Create a temporary bmesh from the current object's mesh data
+            temp_bm = bmesh.new()
+            temp_bm.from_mesh(mesh)
 
-                if temp_uv_layer:
-                    # Transform the temporary bmesh to the object's world space
-                    temp_bm.transform(obj.matrix_world)
+            # Transform the temporary bmesh to the object's world space
+            temp_bm.transform(obj.matrix_world)
 
-                    # Loop over each face in the temporary bmesh
-                    for face in temp_bm.faces:
-                        # Create a list of the corresponding vertices in the combined bmesh
-                        new_face_verts = []
-                        for loop in face.loops:
-                            vert = loop.vert
-                            # Check if the vertex is already in the main bmesh
-                            if vert not in vertex_map:
-                                # Add the vertex to the main bmesh and store the mapping
-                                new_vert = bm.verts.new(vert.co)
-                                vertex_map[vert] = new_vert
-                            new_face_verts.append(vertex_map[vert])
+            # Ensure the materials are copied over correctly
+            for mat_slot in obj.material_slots:
+                if mat_slot.material not in material_map:
+                    # Append the material to the new object if it doesn't exist yet
+                    new_object.data.materials.append(mat_slot.material)
+                    material_map[mat_slot.material] = len(new_object.data.materials) - 1
 
-                        # Create the face in the combined bmesh
-                        bm_face = bm.faces.new(new_face_verts)
+            # Loop over each face in the temporary bmesh
+            for face in temp_bm.faces:
+                # Create a list of corresponding vertices in the combined bmesh
+                new_face_verts = []
+                for loop in face.loops:
+                    vert = loop.vert
+                    # Check if the vertex is already in the main bmesh
+                    if vert not in vertex_map:
+                        # Add the vertex to the main bmesh and store the mapping
+                        new_vert = bm.verts.new(vert.co)
+                        vertex_map[vert] = new_vert
+                    new_face_verts.append(vertex_map[vert])
 
-                        # Copy the UV coordinates from the "Lightmap" UV layer
+                # Create the face in the combined bmesh
+                bm_face = bm.faces.new(new_face_verts)
+
+                # Copy UV coordinates for all UV layers
+                for uv_layer_name, uv_layer in uv_map_layers.items():
+                    temp_uv_layer = temp_bm.loops.layers.uv.get(uv_layer_name)
+                    if temp_uv_layer:
                         for loop_dest, loop_src in zip(bm_face.loops, face.loops):
                             loop_dest[uv_layer].uv = loop_src[temp_uv_layer].uv
 
-                # Free the temporary bmesh
-                temp_bm.free()
+                # Assign the correct material index to the face
+                mat_index = face.material_index
+                if mat_index < len(obj.material_slots):
+                    mat = obj.material_slots[mat_index].material
+                    bm_face.material_index = material_map[mat]
+
+            # Free the temporary bmesh
+            temp_bm.free()
 
         # Write the combined bmesh to the new mesh
         bm.to_mesh(new_mesh)
         bm.free()
 
-        # Ensure the new object does not have any materials
-        new_object.data.materials.clear()
-
-        # Update the mesh
-        new_mesh.update()
+        # Ensure the new object has all materials correctly assigned
+        new_object.data.update()
+        
+        
+        # Select the new object and make active.
+        new_object.select_set(True)
+        bpy.context.view_layer.objects.active = new_object
+        
+        # Ensure the lightmap is selected, as that's the UV we're baking to.
+        new_object.data.uv_layers[0].active_render = True
+        new_object.data.uv_layers["Lightmap"].active = True
 
         return new_object
     
-    def _prepare_objects_for_baking(self, mesh_objects, bake_object):
-        # Ensure the bakeable mesh isn't visible in the render.
-        bake_object.select_set(True)
-        # Select all mesh_objects and make the bake_object active so "Selected ot Active" baking works.
-        bpy.ops.object.select_all(action='DESELECT')
-        for obj in mesh_objects:
-            obj.select_set(True)
-            
-        bpy.context.view_layer.objects.active = bake_object
+    def _get_empty_material(self):
+        """ Creates a bake compatible material for the bake object. """
+        mat = bpy.data.materials.new(self.TMP_EMPTY_MAT_NAME)
+        mat.use_nodes = True
+        img_node = mat.node_tree.nodes.new(type = 'ShaderNodeTexImage')
+        img_node.name = self.TMP_IMAGE_NODE_NAME
+        return mat
     
-    def _create_bake_material(self, bake_object):
-        """Create a bake material for the bake object."""
-        # Ensure the object has an active material
-        if not bake_object.data.materials:
-            material = bpy.data.materials.new(name="BakeMaterial")
-            bake_object.data.materials.append(material)
-        else:
-            material = bake_object.data.materials[0]
-
-        # Ensure the material uses nodes
-        if not material.use_nodes:
-            material.use_nodes = True
-
-        # Access the material's node tree
-        node_tree = material.node_tree
-
-        # Clear existing nodes
-        node_tree.nodes.clear()
-
-        # Create new nodes
-        bsdf_node = node_tree.nodes.new(type='ShaderNodeBsdfPrincipled')
-        output_node = node_tree.nodes.new(type='ShaderNodeOutputMaterial')
-        image_node = node_tree.nodes.new(type='ShaderNodeTexImage')
-
-        # Position nodes
-        bsdf_node.location = (0, 0)
-        output_node.location = (200, 0)
-        image_node.location = (-200, 0)
-
-        # Link nodes
-        node_tree.links.new(image_node.outputs['Color'], bsdf_node.inputs['Base Color'])
-        node_tree.links.new(bsdf_node.outputs['BSDF'], output_node.inputs['Surface'])
-
-        image_node.image = self.bake_image
-
+    def _apply_bake_image(self, bake_object):
+        """ Apply the bake image to all materials in the bake_object"""
+        if len(bake_object.material_slots) == 0:
+            bpy.ops.object.material_slot_add()
+        for slot in bake_object.material_slots:
+            if slot.material is None:
+                slot.material = self._get_empty_material()
+            mat = slot.material
+            mat.use_nodes = True
+            if self.TMP_IMAGE_NODE_NAME in mat.node_tree.nodes:
+                img_node = mat.node_tree.nodes[self.TMP_IMAGE_NODE_NAME]
+            else:
+                img_node = mat.node_tree.nodes.new(type = 'ShaderNodeTexImage')
+                img_node.name = self.TMP_IMAGE_NODE_NAME
+            mat.node_tree.nodes.active = img_node
+            img_node.image = self.bake_image
 
     
     def _setup_bake_settings(self):
@@ -255,11 +267,8 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         
         bake_object = self._create_bakeable_object(mesh_objects)
         yield 1
-        self._create_bake_material(bake_object)
+        self._apply_bake_image(bake_object)
         yield 1
-        self._prepare_objects_for_baking(mesh_objects, bake_object)
-        yield 1
-        
         print("Setting bake settings...")
         self._setup_bake_settings()
         
