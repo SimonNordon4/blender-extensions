@@ -154,6 +154,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         
         self.bake_object = None
         self.bake_name = None
+        self.bake_image = None
         
         self.scene_state = SceneState()
 

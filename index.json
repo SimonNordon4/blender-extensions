@@ -4,9 +4,28 @@
   "data": [
     {
       "schema_version": "1.0.0",
-      "id": "unity_exporter",
-      "name": "UnityExporter",
-      "tagline": "UnityExporter Blender Addon",
+      "id": "lightmapper",
+      "name": "Lightmapper",
+      "tagline": "Lightmapper Blender Addon",
+      "version": "1.0.0",
+      "type": "add-on",
+      "maintainer": "Simon Nordon <simon.nordon@protonmail.com>",
+      "license": [
+        "SPDX:GPL-2.0-or-later"
+      ],
+      "blender_version_min": "4.2.0",
+      "tags": [
+        "Bake"
+      ],
+      "archive_url": "./lightmapper.zip",
+      "archive_size": 12982784,
+      "archive_hash": "sha256:70c2aa678480e1609574f5b22fb63401d57646d28b0f6172756310d5b8ea6daa"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "ripper",
+      "name": "Ripper",
+      "tagline": "Ripper Blender Addon",
       "version": "1.0.0",
       "type": "add-on",
       "maintainer": "Simon Nordon <simon.nordon@protonmail.com>",
@@ -17,9 +36,28 @@
       "tags": [
         "Object"
       ],
+      "archive_url": "./ripper.zip",
+      "archive_size": 26566,
+      "archive_hash": "sha256:f8c1553525d083e07f49bac862e50cc5c7e6744a16e09a5ed71465b7b2541d86"
+    },
+    {
+      "schema_version": "1.0.0",
+      "id": "unity_exporter",
+      "name": "UnityExporter",
+      "tagline": "UnityExporter Blender Addon",
+      "version": "1.0.1",
+      "type": "add-on",
+      "maintainer": "Simon Nordon <simon.nordon@protonmail.com>",
+      "license": [
+        "SPDX:GPL-2.0-or-later"
+      ],
+      "blender_version_min": "4.2.0",
+      "tags": [
+        "Object"
+      ],
       "archive_url": "./unity_exporter.zip",
-      "archive_size": 17092,
-      "archive_hash": "sha256:fb84fde6a1c66a9c712560710ab1e2f831988faecf85061959112817154398c9"
+      "archive_size": 19155,
+      "archive_hash": "sha256:79001b4e1b7fca96c1d679cd9e6aa7c3cdd863b81397bbe35cf65fa73f9dc306"
     }
   ]
 }
