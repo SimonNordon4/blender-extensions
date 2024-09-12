@@ -33,6 +33,108 @@ class LIGHTMAPPER_OT_create_lightmap_uv(bpy.types.Operator):
 
         return {'FINISHED'}
 
+class SceneState():
+    def __init__(self, bake_node_material_name="LIGHTMAPPER_TMP_EMPTY_MAT", bake_node_name="LIGHTMAPPER_TMP_IMAGE_NODE"):
+        self.original_selection = None
+        self.bake_node_material_name = bake_node_material_name
+        self.bake_node_name = bake_node_name
+
+        
+    def save_original_materials(self):
+        original_materials = {}
+        for obj in bpy.context.selected_objects:
+            if obj.type == 'MESH':
+                original_materials[obj] = [slot.material for slot in obj.material_slots]
+        return original_materials
+    
+    def save_compositor_state(self):
+        scene = bpy.context.scene
+        if scene.use_nodes:
+            self.original_compositor_nodes = [node.copy() for node in scene.node_tree.nodes]
+            self.original_compositor_links = [link.copy() for link in scene.node_tree.links]
+
+    def restore_compositor_state(self):
+        scene = bpy.context.scene
+        if scene.use_nodes and self.original_compositor_nodes and self.original_compositor_links:
+            scene.node_tree.nodes.clear()
+            scene.node_tree.links.clear()
+            for node in self.original_compositor_nodes:
+                scene.node_tree.nodes.new(type=node.bl_idname)
+                for attr in dir(node):
+                    if not attr.startswith("__") and not callable(getattr(node, attr)):
+                        setattr(scene.node_tree.nodes[-1], attr, getattr(node, attr))
+            for link in self.original_compositor_links:
+                scene.node_tree.links.new(
+                    scene.node_tree.nodes[link.from_node.name].outputs[link.from_socket.name],
+                    scene.node_tree.nodes[link.to_node.name].inputs[link.to_socket.name]
+                )
+    
+    def restore_empty_materials(self):
+        """ Removes temporary bake material from selected objects, they will be applied if the material slot has an empty material """
+        for obj in self.original_selection:
+            if obj.type == 'MESH':
+                for slot in obj.material_slots:
+                    if slot.material and slot.material.name == self.bake_node_material_name:
+                        obj.data.materials.pop(index=obj.material_slots.find(slot.material.name))
+                        
+    def restore_original_materials(self):
+        """ Removes the bake image node that was created for the bake. """
+        for obj, materials in self.original_materials.items():
+            for material in materials:
+                if material and material.node_tree:
+                    nodes = material.node_tree.nodes
+                    for node in nodes:
+                        if node.name == self.bake_node_name:
+                            nodes.remove(node)
+                            
+    def restore_selection(self):
+        # deselect all
+        bpy.ops.object.select_all(action='DESELECT')
+        
+        # select all original objects and make them renderable.
+        for obj in self.original_selection:
+            obj.select_set(True)
+            obj.hide_render = False
+            
+        # set the original active object
+        if self.original_active_object is not None:
+            bpy.context.view_layer.objects.active = self.original_active_object
+        
+    def save(self, context):
+        self.engine = bpy.context.scene.render.engine
+        self.samples = bpy.context.scene.cycles.samples
+        self.use_denoising = bpy.context.scene.cycles.use_denoising
+        self.bake_type = bpy.context.scene.cycles.bake_type
+        self.use_pass_direct = bpy.context.scene.render.bake.use_pass_direct
+        self.use_pass_indirect = bpy.context.scene.render.bake.use_pass_indirect
+        self.use_pass_color = bpy.context.scene.render.bake.use_pass_color
+        self.use_selected_to_active = bpy.context.scene.render.bake.use_selected_to_active
+        
+        self.original_active_object = bpy.context.view_layer.objects.active
+        self.original_selection = context.selected_objects
+        self.active_object = context.active_object
+        self.original_materials = self.save_original_materials()
+
+        # self.save_compositor_state()
+    
+    def restore(self, context):
+        bpy.context.scene.render.engine = self.engine
+        bpy.context.scene.cycles.samples = self.samples
+        bpy.context.scene.cycles.use_denoising = self.use_denoising
+
+        bpy.context.scene.cycles.bake_type = self.bake_type
+        bpy.context.scene.render.bake.use_pass_direct = self.use_pass_direct
+        bpy.context.scene.render.bake.use_pass_indirect = self.use_pass_indirect
+        bpy.context.scene.render.bake.use_pass_color = self.use_pass_color
+
+        bpy.context.scene.render.bake.use_selected_to_active = self.use_selected_to_active
+
+        self.restore_selection()
+        self.restore_original_materials()
+        self.restore_empty_materials()
+        # self.restore_compositor_state()
+        
+
 
 class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
     bl_idname = "lightmapper.bake_lightmap"
@@ -40,18 +142,19 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
     bl_description = "Bake lightmap for selected objects"
     bl_options = {'REGISTER', 'UNDO'}
 
-    _timer = None
-    bake_image = None
-    # Clean this up at the end.
-    bake_image_node = None
-    bake_iterator = None
-    
-    TMP_EMPTY_MAT_NAME = "BAKELAB_TMP_EMPTY_MAT"
-    TMP_IMAGE_NODE_NAME = "BAKELAB_TMP_IMAGE_NODE"
-    
-    #debug
-    tick = 0
-    
+    def __init__(self):
+        self.TMP_EMPTY_MAT_NAME = "BAKELAB_TMP_EMPTY_MAT"
+        self.TMP_IMAGE_NODE_NAME = "BAKELAB_TMP_IMAGE_NODE"
+        
+        self._timer = None
+        self.bake_iterator = None
+        
+        self.bake_object = None
+        
+        self.scene_state = SceneState()
+
+        self.lightmapper_props = bpy.context.scene.lightmapper_properties
+
     def _validate_mesh_objects(self, context, mesh_objects):
             """ Ensure the object is in a state that supports baking. """
             if not mesh_objects:
@@ -268,9 +371,18 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         # Run the compositor
         bpy.ops.render.render(write_still=True)
         
+    def save_state(self, context):
+        self.scene_state.save(context)
+        
+    def restore_state(self, context):
+        self.scene_state.restore(context)
+        if self.bake_object is not None:
+            if self.bake_object.data is not None:
+                bpy.data.meshes.remove(self.bake_object.data, do_unlink=True)
 
     def execute(self, context):
         # Run the update loop as an iterator.
+        self.save_state(context)
         self.bake_iterator = self.bake(context)
         # We'll update every 0.5 seconds.
         self._timer = context.window_manager.event_timer_add(0.5, window=context.window)  # Check every 0.5 seconds
@@ -285,49 +397,37 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         
         mesh_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
         
-        print(f"Meshes found: {mesh_objects}")
         
-        print("Validating meshes...")
         if not self._validate_mesh_objects(context, mesh_objects):
             yield -1
         
-        print("Selecting correct UVs...")
         self._select_correct_uv(mesh_objects)
         
         yield 1
         
 
-        print("Creating bake image 'BakeImage'...")
         # 2. Create an image to bake to, and a new bake object to be baked to.
         self.bake_image = bpy.data.images.new("BakeImage", width=1024, height=1024)
-        print("Creating bake object...")
-        bake_object = self._create_bakeable_object(mesh_objects)
+        self.bake_object = self._create_bakeable_object(mesh_objects)
         yield 1
-        print("Apply Bake Image to Bake Object.")
-        self._apply_bake_image(bake_object)
+        self._apply_bake_image(self.bake_object)
         yield 1
-        print("Preparing Mesh Objects and Bake Object for Baking...")
-        self._prepare_object_for_bake(mesh_objects, bake_object)
+        self._prepare_object_for_bake(mesh_objects, self.bake_object)
         yield 1
-        print("Setting bake settings...")
         self._setup_bake_settings()
         
-        
-        print("Starting bake...")
         while bpy.ops.object.bake('INVOKE_DEFAULT', type='DIFFUSE') != {'RUNNING_MODAL'}:
             yield 1 # 'INVOKE_DEFAULT' will give us the progress bar.
         while not self.bake_image.is_dirty:
             yield 1
             
-        print("Bake complete.")
-        print("Setting up compositor for denoising...")
+
         self._setup_compositor_for_denoising()
         yield 1
         bpy.ops.render.render(write_still=False)
         while bpy.ops.render.render() == {'RUNNING_MODAL'}:
             yield 1
-        print("Denoising complete.")
-        print("Saving image...")
+
         self._render_denoised_image()
             
         yield 0
@@ -343,7 +443,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
                 return {"RUNNING_MODAL"}
             if result == -1:
                 self.cancel(context)
-                return {'CANCELLED'}
+                return  {'CANCELLED'}
             if result == 0:
                 self.finish(context)
                 return {'FINISHED'}
@@ -354,7 +454,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         print("Modal cancelled")
         if self._timer:
             context.window_manager.event_timer_remove(self._timer)
-        return {'CANCELLED'}
+        self.restore_state(context)
     
     def finish(self, context):
         print("Modal Finished")
@@ -363,6 +463,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         wm = context.window_manager
         if self._timer:
             wm.event_timer_remove(self._timer)
+        self.restore_state(context)
 
 def register():
     print("Registering lightmapper_operators")
