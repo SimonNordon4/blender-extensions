@@ -181,10 +181,6 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
 
         # Ensure the new object has all materials correctly assigned
         new_object.data.update()
-        
-        
-
-
         return new_object
     
     def _get_empty_material(self):
@@ -217,7 +213,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         # Ensure the original objects are hidden and unselected
         for obj in mesh_objects:
             obj.select_set(False)
-            obj.hide_render
+            obj.hide_render = True
         
         # Ensure the bake object is selected and active, with correct UVs
         bake_object.select_set(True)
@@ -241,8 +237,37 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         
         bpy.context.scene.render.bake.use_selected_to_active = False
         
-    
+    def _setup_compositor_for_denoising(self):
+        # Enable use_nodes for the current scene
+        bpy.context.scene.use_nodes = True
+        tree = bpy.context.scene.node_tree
 
+        # Clear default nodes
+        for node in tree.nodes:
+            tree.nodes.remove(node)
+
+        # Create input image node
+        input_node = tree.nodes.new(type='CompositorNodeImage')
+        input_node.image = self.bake_image
+
+        # Create denoise node
+        denoise_node = tree.nodes.new(type='CompositorNodeDenoise')
+
+        # Create output node
+        output_node = tree.nodes.new(type='CompositorNodeOutputFile')
+        output_node.format.file_format = 'HDR'
+        output_node.format.color_depth = '32'
+        output_node.base_path = "//denoised_lightmap"
+        output_node.file_slots[0].path = "denoised_lightmap_####.hdr"
+
+        # Link nodes
+        tree.links.new(input_node.outputs[0], denoise_node.inputs[0])
+        tree.links.new(denoise_node.outputs[0], output_node.inputs[0])
+        
+    def _render_denoised_image(self):
+        # Run the compositor
+        bpy.ops.render.render(write_still=True)
+        
 
     def execute(self, context):
         # Run the update loop as an iterator.
@@ -295,6 +320,15 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
             yield 1
             
         print("Bake complete.")
+        print("Setting up compositor for denoising...")
+        self._setup_compositor_for_denoising()
+        yield 1
+        bpy.ops.render.render(write_still=False)
+        while bpy.ops.render.render() == {'RUNNING_MODAL'}:
+            yield 1
+        print("Denoising complete.")
+        print("Saving image...")
+        self._render_denoised_image()
             
         yield 0
 
