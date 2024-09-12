@@ -19,4 +19,3 @@ importlib.reload(lightmapper.lightmapper_panel)
 
 lightmapper.__init__.register()
 
- 
