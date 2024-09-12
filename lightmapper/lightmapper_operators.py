@@ -1,10 +1,9 @@
 import bpy
 import bpy.utils
 import bmesh
-
 import bpy.ops
-
 import os.path
+import re
 
 
 
@@ -154,6 +153,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         self.bake_iterator = None
         
         self.bake_object = None
+        self.bake_name = None
         
         self.scene_state = SceneState()
 
@@ -227,6 +227,23 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
             obj.data.uv_layers[0].active_render = True
             # Ensure the lightmap is selected, as that's the UV we're baking to.
             obj.data.uv_layers["Lightmap"].active = True
+       
+    def _create_bake_image(self, context):
+        # get the resolution from the props
+        width = self.lightmapper_props.lightmap_width
+        height = self.lightmapper_props.lightmap_height
+        new_image = bpy.data.images.new(name="BakeImage", width=width, height=height)
+        
+        # set the float depth
+        new_image.use_generated_float = True
+        # EXR for high dynamic range.
+        new_image.file_format = 'OPEN_EXR'
+        
+        # color space
+        # new_image.color_space = 'sRGB' # Don't need to set for now.
+        return new_image
+        
+        
        
     def _create_bakeable_object(self, mesh_objects):
         """ Create a combined mesh from the selected objects, including UVs and materials. """
@@ -363,7 +380,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
     def _setup_bake_settings(self):
         """ Set up bake settings for diffuse lightmap baking. """
         bpy.context.scene.render.engine = 'CYCLES'
-        bpy.context.scene.cycles.samples = 128
+        bpy.context.scene.cycles.samples = self.lightmapper_props.num_samples
         bpy.context.scene.cycles.use_denoising = False
 
         bpy.context.scene.cycles.bake_type = 'DIFFUSE'
@@ -393,8 +410,11 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         output_node = tree.nodes.new(type='CompositorNodeOutputFile')
         output_node.format.file_format = 'HDR'
         output_node.format.color_depth = '32'
-        output_node.base_path = "//denoised_lightmap"
-        output_node.file_slots[0].path = "denoised_lightmap_####.hdr"
+        output_node.format.exr_codec = 'ZIP'
+        
+        
+        output_node.base_path = bpy.context.scene.lightmapper_properties.export_path
+        output_node.file_slots[0].path = self.bake_name
 
         # Link nodes
         tree.links.new(input_node.outputs[0], denoise_node.inputs[0])
@@ -404,14 +424,47 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         # Run the compositor
         bpy.ops.render.render(write_still=True)
         
+    def _clean_up_exported_name(self):
+        export_path = bpy.context.scene.lightmapper_properties.export_path
+        exported_file = None
+        cleaned_file = os.path.join(export_path, f"{self.bake_name}.hdr")
+
+        print(f"Export path: {export_path}")
+        print(f"Expected cleaned file: {cleaned_file}")
+
+        for file in os.listdir(export_path):
+            print(f"Checking file: {file}")
+            if file.startswith(self.bake_name) and file.endswith(".hdr"):
+                if re.match(rf"{re.escape(self.bake_name)}\d{{4}}\.hdr$", file):
+                    exported_file = os.path.join(export_path, file)
+                    print(f"Found exported file: {exported_file}")
+                    break
+
+        if exported_file is None:
+            print("Exported file not found.")
+            return
+
+        if os.path.exists(cleaned_file):
+            print(f"Removing existing cleaned file: {cleaned_file}")
+            os.remove(cleaned_file)
+
+        print(f"Renaming {exported_file} to {cleaned_file}")
+        os.rename(exported_file, cleaned_file)
+        
     def save_state(self, context):
         self.scene_state.save(context)
         
     def restore_state(self, context):
         self.scene_state.restore(context)
+        
+        # remove the bake object
         if self.bake_object is not None:
             if self.bake_object.data is not None:
                 bpy.data.meshes.remove(self.bake_object.data, do_unlink=True)
+        
+        # remove the bake_image
+        if self.bake_image is not None:
+            bpy.data.images.remove(self.bake_image, do_unlink=True)
 
     def execute(self, context):
         # Run the update loop as an iterator.
@@ -420,6 +473,13 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         # We'll update every 0.5 seconds.
         self._timer = context.window_manager.event_timer_add(0.5, window=context.window)  # Check every 0.5 seconds
         context.window_manager.modal_handler_add(self)
+        
+        bake_name_target = bpy.context.scene.lightmapper_properties.bake_name
+        if bake_name_target is 'ACTIVE_OBJECT':
+            self.bake_name = context.active_object.name
+        else:
+            self.bake_name = context.view_layer.active_layer_collection.collection.name
+        
 
         return {'RUNNING_MODAL'}
     
@@ -445,7 +505,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         
 
         # 2. Create an image to bake to, and a new bake object to be baked to.
-        self.bake_image = bpy.data.images.new("BakeImage", width=1024, height=1024)
+        self.bake_image = self._create_bake_image(context)
         self.bake_object = self._create_bakeable_object(mesh_objects)
         yield 1
         self._apply_bake_image(self.bake_object)
@@ -460,14 +520,14 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         while not self.bake_image.is_dirty:
             yield 1
             
-
         self._setup_compositor_for_denoising()
         yield 1
-        bpy.ops.render.render(write_still=False)
+        
+        self._render_denoised_image()
         while bpy.ops.render.render() == {'RUNNING_MODAL'}:
             yield 1
 
-        self._render_denoised_image()
+        self._clean_up_exported_name()
             
         yield 0
 

@@ -35,6 +35,14 @@ class LIGHTMAPPER_PT_properties(bpy.types.PropertyGroup):
         ],
         default='ACTIVE_OBJECT'
     )  # type: ignore
+    
+    num_samples: bpy.props.IntProperty(
+            name="Number of Samples",
+            description="Number of samples for baking",
+            default=64,
+            min=8,
+            max=256
+        )  # type: ignore
 
     
 
