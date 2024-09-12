@@ -2,6 +2,10 @@ import bpy
 import bpy.utils
 import bmesh
 
+import bpy.ops
+
+import os.path
+
 
 
 class LIGHTMAPPER_OT_create_lightmap_uv(bpy.types.Operator):
@@ -154,6 +158,35 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         self.scene_state = SceneState()
 
         self.lightmapper_props = bpy.context.scene.lightmapper_properties
+        
+    def _validate_export_path(self, context):
+        export_path = self.lightmapper_props.export_path
+        if not export_path:
+            self.report({'ERROR'}, "Export path not set.")
+            return False
+        
+        if not os.path.exists(export_path):
+            self.report({'ERROR'}, "Export path does not exist.")
+            return False
+
+        if not os.path.isdir(export_path):
+            self.report({'ERROR'}, "Export path is not a directory.")
+            return False
+
+        return True
+
+    def _validate_bake_objects(self, context):
+        """ Ensure the object is in a state that supports baking. """
+        if not self.bake_object:
+            self.report({'ERROR'}, "No mesh objects selected.")
+            return False
+
+        # Ensure we're in object mode.
+        if context.mode != 'OBJECT':
+            self.report({'ERROR'}, "Lightmap baking requires object mode.")
+            return False
+        pass
+            
 
     def _validate_mesh_objects(self, context, mesh_objects):
             """ Ensure the object is in a state that supports baking. """
@@ -391,12 +424,17 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         return {'RUNNING_MODAL'}
     
     def bake(self, context):
+       
+        
         yield 1
-        print("Starting lightmapping process...")
         # 1. Validate that the selected objects are suitable for lightmapping.
         
         mesh_objects = [obj for obj in context.selected_objects if obj.type == 'MESH']
+        # deselect everything so we're not baking lights and empties.
+        bpy.ops.object.select_all(action='DESELECT')
         
+        if not self._validate_export_path(context):
+            yield -1
         
         if not self._validate_mesh_objects(context, mesh_objects):
             yield -1
@@ -416,6 +454,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         yield 1
         self._setup_bake_settings()
         
+
         while bpy.ops.object.bake('INVOKE_DEFAULT', type='DIFFUSE') != {'RUNNING_MODAL'}:
             yield 1 # 'INVOKE_DEFAULT' will give us the progress bar.
         while not self.bake_image.is_dirty:
@@ -476,3 +515,4 @@ def unregister():
 
 if __name__ == "__main__":
     register()
+

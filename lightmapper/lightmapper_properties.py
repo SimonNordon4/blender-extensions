@@ -26,8 +26,8 @@ class LIGHTMAPPER_PT_properties(bpy.types.PropertyGroup):
         subtype='DIR_PATH'
     )  # type: ignore
     
-    bake_target: EnumProperty(
-        name="Bake Target",
+    bake_name: EnumProperty(
+        name="Bake Name",
         description="Choose the bake target",
         items=[
             ('ACTIVE_OBJECT', "Active Object", "Bake the active object"),
@@ -35,7 +35,7 @@ class LIGHTMAPPER_PT_properties(bpy.types.PropertyGroup):
         ],
         default='ACTIVE_OBJECT'
     )  # type: ignore
-    
+
     
 
 def register():
