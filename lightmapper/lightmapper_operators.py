@@ -246,101 +246,43 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         
        
     def _create_bakeable_object(self, mesh_objects):
-        """ Create a combined mesh from the selected objects, including UVs, materials, and normals. """
-
-        # Create a new mesh
-        new_mesh = bpy.data.meshes.new(name="BakeableMesh")
-
-        # Create a new object with the new mesh
-        new_object = bpy.data.objects.new(name="BakeableObject", object_data=new_mesh)
-
-        # Link the new object to the current collection
-        bpy.context.collection.objects.link(new_object)
-
-        # Create a bmesh to combine all selected meshes
-        bm = bmesh.new()
-
-        # Dictionary to map temporary vertices to the combined bmesh vertices
-        vertex_map = {}
-
-        # Create a dictionary to hold the UV layer mappings for each UV map
-        uv_map_layers = {}
-
-        # List to keep track of all materials across objects
-        material_map = {}
-
+        """ Create a combined mesh from the selected objects, applying modifiers to the duplicated objects only. """
+        
+        # Deselect all objects
+        bpy.ops.object.select_all(action='DESELECT')
+        
+        # Select the objects to duplicate
         for obj in mesh_objects:
-            # Ensure the object is in object mode
+            obj.select_set(True)
+
+        # Duplicate the selected objects
+        bpy.ops.object.duplicate(linked=False)
+        
+        # Get the duplicated objects
+        duplicated_objects = [obj for obj in bpy.context.selected_objects if obj not in mesh_objects]
+        
+        # Apply modifiers to the duplicated objects
+        for obj in duplicated_objects:
+            # Set the duplicated object as active
             bpy.context.view_layer.objects.active = obj
-            bpy.ops.object.mode_set(mode='OBJECT')
+            
+            # Apply all modifiers on the duplicated object
+            for modifier in obj.modifiers:
+                bpy.ops.object.modifier_apply(modifier=modifier.name)
+        
+        # Join the duplicated objects into a single object
+        bpy.ops.object.join()
 
-            # Get the mesh data
-            mesh = obj.data
-
-            # Add all UV maps from the original object
-            for uv_layer in mesh.uv_layers:
-                # Create a new UV layer in the combined mesh if it doesn't already exist
-                if uv_layer.name not in uv_map_layers:
-                    uv_map_layers[uv_layer.name] = bm.loops.layers.uv.new(uv_layer.name)
-
-            # Create a temporary bmesh from the current object's mesh data
-            temp_bm = bmesh.new()
-            temp_bm.from_mesh(mesh)
-
-            # Transform the temporary bmesh to the object's world space
-            temp_bm.transform(obj.matrix_world)
-
-            # Ensure the materials are copied over correctly
-            for mat_slot in obj.material_slots:
-                if mat_slot.material not in material_map:
-                    # Append the material to the new object if it doesn't exist yet
-                    new_object.data.materials.append(mat_slot.material)
-                    material_map[mat_slot.material] = len(new_object.data.materials) - 1
-
-            # Loop over each face in the temporary bmesh
-            for face in temp_bm.faces:
-                # Create a list of corresponding vertices in the combined bmesh
-                new_face_verts = []
-                for loop in face.loops:
-                    vert = loop.vert
-                    # Check if the vertex is already in the main bmesh
-                    if vert not in vertex_map:
-                        # Add the vertex to the main bmesh and store the mapping
-                        new_vert = bm.verts.new(vert.co)
-                        vertex_map[vert] = new_vert
-                    new_face_verts.append(vertex_map[vert])
-
-                # Create the face in the combined bmesh
-                bm_face = bm.faces.new(new_face_verts)
-
-                # Copy UV coordinates for all UV layers
-                for uv_layer_name, uv_layer in uv_map_layers.items():
-                    temp_uv_layer = temp_bm.loops.layers.uv.get(uv_layer_name)
-                    if temp_uv_layer:
-                        for loop_dest, loop_src in zip(bm_face.loops, face.loops):
-                            loop_dest[uv_layer].uv = loop_src[temp_uv_layer].uv
-
-                # Assign the correct material index to the face
-                mat_index = face.material_index
-                if mat_index < len(obj.material_slots):
-                    mat = obj.material_slots[mat_index].material
-                    bm_face.material_index = material_map[mat]
-
-            # Copy normals
-            for vert in temp_bm.verts:
-                if vert in vertex_map:
-                    vertex_map[vert].normal = vert.normal
-
-            # Free the temporary bmesh
-            temp_bm.free()
-
-        # Write the combined bmesh to the new mesh
-        bm.to_mesh(new_mesh)
-        bm.free()
-
-        # Ensure the new object has all materials correctly assigned
-        new_object.data.update()
+        # The newly created object will be the active object
+        new_object = bpy.context.view_layer.objects.active
+        
+        # Rename the new object to "BakeableObject"
+        new_object.name = "BakeableObject"
+        
+        # Return the new combined object
         return new_object
+
+
 
     
     def _get_empty_material(self):

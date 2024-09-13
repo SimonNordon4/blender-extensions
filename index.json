@@ -7,7 +7,7 @@
       "id": "lightmapper",
       "name": "Lightmapper",
       "tagline": "Lightmapper Blender Addon",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "type": "add-on",
       "maintainer": "Simon Nordon <simon.nordon@protonmail.com>",
       "license": [
@@ -18,8 +18,8 @@
         "Bake"
       ],
       "archive_url": "./lightmapper.zip",
-      "archive_size": 12982784,
-      "archive_hash": "sha256:70c2aa678480e1609574f5b22fb63401d57646d28b0f6172756310d5b8ea6daa"
+      "archive_size": 8026,
+      "archive_hash": "sha256:0048e2655028a1eb43cdc8770346c5066df7d24066261b19d60c3a25f30f4e54"
     },
     {
       "schema_version": "1.0.0",
