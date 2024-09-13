@@ -244,10 +244,10 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         # new_image.color_space = 'sRGB' # Don't need to set for now.
         return new_image
         
-        
        
     def _create_bakeable_object(self, mesh_objects):
-        """ Create a combined mesh from the selected objects, including UVs and materials. """
+        """ Create a combined mesh from the selected objects, including UVs, materials, and normals. """
+
         # Create a new mesh
         new_mesh = bpy.data.meshes.new(name="BakeableMesh")
 
@@ -262,7 +262,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
 
         # Dictionary to map temporary vertices to the combined bmesh vertices
         vertex_map = {}
-        
+
         # Create a dictionary to hold the UV layer mappings for each UV map
         uv_map_layers = {}
 
@@ -326,6 +326,11 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
                     mat = obj.material_slots[mat_index].material
                     bm_face.material_index = material_map[mat]
 
+            # Copy normals
+            for vert in temp_bm.verts:
+                if vert in vertex_map:
+                    vertex_map[vert].normal = vert.normal
+
             # Free the temporary bmesh
             temp_bm.free()
 
@@ -336,6 +341,7 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         # Ensure the new object has all materials correctly assigned
         new_object.data.update()
         return new_object
+
     
     def _get_empty_material(self):
         """ Creates a bake compatible material for the bake object. """
@@ -458,6 +464,12 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
     def restore_state(self, context):
         self.scene_state.restore(context)
         
+        # get debug_mode property
+        debug_mode = context.scene.lightmapper_properties.debug_mode
+        # Skip the deletion step if we're in debug mode.        
+        if debug_mode:
+            return
+        
         # remove the bake object
         if self.bake_object is not None:
             if self.bake_object.data is not None:
@@ -476,10 +488,12 @@ class LIGHTMAPPER_OT_bake_lightmap(bpy.types.Operator):
         context.window_manager.modal_handler_add(self)
         
         bake_name_target = bpy.context.scene.lightmapper_properties.bake_name
-        if bake_name_target is 'ACTIVE_OBJECT':
+        if bake_name_target == 'ACTIVE_OBJECT':
             self.bake_name = context.active_object.name
-        else:
+        elif bake_name_target == 'COLLECTION':
             self.bake_name = context.view_layer.active_layer_collection.collection.name
+        else:
+            self.bake_name = "error: bad_name"
         
 
         return {'RUNNING_MODAL'}

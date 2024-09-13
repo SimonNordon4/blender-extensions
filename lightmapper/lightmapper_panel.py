@@ -13,7 +13,8 @@ class LIGHTMAPPER_PT_main_panel(bpy.types.Panel):
     
         def draw_header(self, context):
             layout = self.layout
-            layout.label(text="", icon="OUTLINER_DATA_LIGHTPROBE")
+            props = context.scene.lightmapper_properties
+            layout.prop(props, "debug_mode", text="", icon='OUTLINER_DATA_LIGHTPROBE')
     
         def draw(self, context):
             layout = self.layout
@@ -41,6 +42,8 @@ class LIGHTMAPPER_PT_main_panel(bpy.types.Panel):
             box.label(text="Bake Name", icon='TEXTURE')
             export_row = box.row(align=True)
             export_row.prop(props, "bake_name", expand=True)
+            
+
 
             # Bake Button
             layout.separator()

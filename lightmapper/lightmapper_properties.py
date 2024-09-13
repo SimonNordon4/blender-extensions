@@ -1,5 +1,5 @@
 import bpy
-from bpy.props import EnumProperty, StringProperty  # type: ignore
+from bpy.props import EnumProperty, StringProperty, BoolProperty  # type: ignore
 
 class LIGHTMAPPER_PT_properties(bpy.types.PropertyGroup):
     lightmap_width: bpy.props.IntProperty(
@@ -44,6 +44,11 @@ class LIGHTMAPPER_PT_properties(bpy.types.PropertyGroup):
             max=256
         )  # type: ignore
 
+    debug_mode: BoolProperty(
+        name="Debug Mode",
+        description="Will not remove temporary bake objects after baking.",
+        default=False
+    )  # type: ignore
     
 
 def register():

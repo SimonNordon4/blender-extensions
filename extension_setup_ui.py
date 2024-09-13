@@ -64,24 +64,32 @@ def create_addon_from_template():
     messagebox.showinfo("Success", f"Addon '{addon_name}' created from template.")
 
 def zip_addon():
-    base_dir = os.getcwd()  # Directory where your add-ons are located
-    ignored_dirs = {"template", ".git", "images"}
+    # Get the directory where the script is located
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    # Let the user select a directory to zip, starting from the script's directory
+    directory_to_zip = filedialog.askdirectory(title="Select Directory to Zip", initialdir=script_dir)
+    if not directory_to_zip:
+        return  # User cancelled
 
-    for item in os.listdir(base_dir):
-        item_path = os.path.join(base_dir, item)
-        if os.path.isdir(item_path) and item not in ignored_dirs:
-            zip_name = os.path.join(base_dir, f"{item}.zip")
-            if os.path.exists(zip_name):
-                os.remove(zip_name)  # Remove the existing zip file if it exists
-            with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
-                for root, dirs, files in os.walk(item_path):
-                    dirs[:] = [d for d in dirs if d not in ignored_dirs]  # Filter out ignored directories
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, base_dir)
-                        zipf.write(file_path, arcname)
+    base_dir = directory_to_zip  # The directory to zip
+    zip_name = os.path.join(os.path.dirname(base_dir), f"{os.path.basename(base_dir)}.zip")
     
-    messagebox.showinfo("Success", "All addons zipped successfully.")
+    if os.path.exists(zip_name):
+        os.remove(zip_name)  # Remove the existing zip file if it exists
+    
+    with zipfile.ZipFile(zip_name, 'w', zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(base_dir):
+            # Exclude directories starting with '~' or named '__pycache__'
+            dirs[:] = [d for d in dirs if not (d.startswith('~') or d == '__pycache__')]
+            for file in files:
+                file_path = os.path.join(root, file)
+                # Set arcname relative to the directory's contents, not the directory itself
+                arcname = os.path.relpath(file_path, base_dir)
+                zipf.write(file_path, arcname)
+
+    messagebox.showinfo("Success", f"Contents of '{os.path.basename(base_dir)}' zipped successfully.")
+
+
 
 
 def build_blender_extensions():
@@ -141,8 +149,8 @@ frame_build_extensions.grid_columnconfigure(0, weight=1)
 frame_build_extensions.grid_columnconfigure(1, weight=1)
 frame_build_extensions.grid_columnconfigure(2, weight=1)
 
-# Add the "Zip Addon" button to the second frame
-zip_button = tk.Button(frame_build_extensions, text="Zip Addons", command=zip_addon)
+# Update the button label in the GUI setup
+zip_button = tk.Button(frame_build_extensions, text="Zip Directory", command=zip_addon)
 zip_button.grid(row=0, column=0, columnspan=3, padx=10, pady=5, sticky="ew")
 
 # Add the "Build Blender Extensions" button to the second frame
